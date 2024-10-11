@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Full-Screen Map of India with Geotags</title>
+
+    <!-- MapmyIndia Map CSS -->
+    <link
+      rel="stylesheet"
+      href="https://apis.mapmyindia.com/advancedmaps/v1/d6d1858e28fba94ab39aa368c886adb2/map_load?v=1.5"
+    />
+    <!-- Leaflet CSS for map styling -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+    />
+
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        height: 100vh; /* Use full viewport height */
+        width: 100vw; /* Use full viewport width */
+        display: flex; /* Use flexbox for centering */
+        justify-content: center; /* Center horizontally */
+        align-items: center; /* Center vertically */
+      }
+      #map {
+        height: 90%; /* Set the map height */
+        width: 100%; /* Set the map width */
+        max-width: 700px; /* Optional: Limit the maximum width */
+        border: 1px solid #ccc; /* Optional: Add a border for visibility */
+      }
+      /* Style for the live updates box */
+      #updates {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        padding: 10px;
+        width: 250px;
+        max-height: 400px;
+        overflow-y: auto;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+      }
+      #updates h3 {
+        margin: 0;
+        color: #333;
+      }
+      #updates-list li {
+        margin: 5px 0;
+      }
+      #updates-list li a {
+        color: red; /* Set link color to red */
+        text-decoration: none; /* Remove underline */
+      }
+
+      #updates-list li a:hover {
+        text-decoration: underline;
+      }
+      #search-bar {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        padding: 10px;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+      }
+
+      #location-input {
+        padding: 5px;
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <!-- Live Updates Box -->
+    <div id="updates">
+      <h3>Live Disaster Updates</h3>
+      <ul id="updates-list">
+        <!-- Updates will be populated here -->
+      </ul>
+    </div>
+
+    <!-- Search Bar -->
+    <div
+      id="search-bar"
+      style="position: absolute; top: 20px; left: 20px; z-index: 1000"
+    >
+      <input type="text" id="location-input" placeholder="Enter location" />
+      <button id="search-button">Search</button>
+    </div>
+
+    <!-- MapmyIndia Map JS -->
+    <script src="https://apis.mapmyindia.com/advancedmaps/v1/d6d1858e28fba94ab39aa368c886adb2/map_load?v=1.5"></script>
+    <!-- Leaflet JS for handling the map -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <script>
+      // Initialize the MapmyIndia map
+      // Initialize the MapmyIndia map
+      var map = new MapmyIndia.Map("map", {
+        center: [20.5937, 78.9629], // India's latitude and longitude
+        zoomControl: true,
+        terrain: true, // Set to terrain view
+        zoom: 5,
+        maxBounds: [
+          [37.0841, 97.40256], // Northeast boundary
+          [8.0883, 68.17665], // Southwest boundary
+        ], // Restrict to India's bounds
+      });
+
+      // Define India's boundary GeoJSON directly within the code
+      fetch("india_India_Country_Boundary.geojson")
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(
+              "Network response was not ok " + response.statusText
+            );
+          }
+          return response.json(); // Parse the JSON data
+        })
+        .then((data) => {
+          // Add GeoJSON layer to the map
+          L.geoJSON(data, {
+            style: {
+              color: "blue",
+              weight: 2,
+              fillOpacity: 0,
+            },
+          }).addTo(map);
+        })
+        .catch((error) => {
+          console.error("There was a problem with the fetch operation:", error);
+        });
+
+      function maskWorld(indiaGeoJSON) {
+        // Create a polygon covering the entire world
+        var worldPolygon = [
+          [
+            [-180, -90],
+            [180, -90],
+            [180, 90],
+            [-180, 90],
+            [-180, -90],
+          ],
+        ];
+
+        // Create a GeoJSON object for the world polygon
+        var worldGeoJSON = {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: worldPolygon,
+          },
+        };
+
+        // Add the world polygon to the map with a blue fill
+        L.geoJSON(worldGeoJSON, {
+          style: {
+            color: "blue", // Border color
+            fillColor: "blue", // Fill color
+            fillOpacity: 1, // Fully opaque
+            weight: 0,
+          },
+        }).addTo(map);
+
+        // Create a GeoJSON layer for India's boundaries
+        var indiaLayer = L.geoJSON(indiaGeoJSON, {
+          style: {
+            color: "transparent", // No border color for India's boundary
+            weight: 0,
+            fillOpacity: 0, // Make India's fill transparent
+          },
+        }).addTo(map);
+
+        // Use the clip method to create a hole where India is located
+        var indiaCoords = indiaGeoJSON.features[0].geometry.coordinates;
+
+        // Create a hole using the coordinates of India's boundary
+        L.polygon(indiaCoords[0], {
+          color: "blue", // Border color for the hole
+          fillColor: "blue", // Fill color for the hole
+          fillOpacity: 1, // Fully opaque
+          weight: 0,
+        }).addTo(map);
+      }
+
+      // Function to add geotag markers on the map
+      function addGeotag(lat, lng, description) {
+        var marker = L.marker([lat, lng])
+          .addTo(map)
+          .bindPopup(description)
+          .openPopup(); // Automatically open the popup
+      }
+
+      // Example Geotags: Add multiple markers with different geotags
+      addGeotag(28.6139, 77.209, "<b>New Delhi</b><br>Capital of India");
+      addGeotag(19.076, 72.8777, "<b>Mumbai</b><br>Financial Hub of India");
+      addGeotag(12.9716, 77.5946, "<b>Bangalore</b><br>IT Capital of India");
+      addGeotag(13.0827, 80.2707, "<b>Chennai</b><br>Capital of Tamil Nadu");
+      addGeotag(
+        22.5726,
+        88.3639,
+        "<b>Kolkata</b><br>Cultural Capital of India"
+      );
+
+      // Function to update the live disaster updates
+      // Function to update the live disaster updates
+      async function updateDisasterUpdates() {
+        const apiKey = "b279c4db697b426a974a21392550a945"; // Replace with your News API key
+        // Adding "India" to the query to filter news related to disasters in India
+        const url = `https://newsapi.org/v2/everything?q=disaster OR earthquake OR flood OR hurricane OR wildfire AND India&sortBy=publishedAt&apiKey=${apiKey}&pageSize=5`;
+
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+
+          if (data.articles && data.articles.length > 0) {
+            const updatesList = document.getElementById("updates-list");
+            updatesList.innerHTML = ""; // Clear existing updates
+
+            data.articles.forEach((article) => {
+              const li = document.createElement("li");
+              li.innerHTML = `<a href="${article.url}" target="_blank">${article.title}</a>`;
+              updatesList.appendChild(li);
+            });
+          } else {
+            console.error("No articles found");
+          }
+        } catch (error) {
+          console.error("Error fetching news updates:", error);
+        }
+      }
+
+      // Update the disaster updates every 60 seconds
+      setInterval(updateDisasterUpdates, 60000); // Call every 60 seconds
+      updateDisasterUpdates(); // Initial call to populate updates immediately
+
+      // Function to search for a location
+async function searchLocation() {
+  const locationName = document.getElementById("location-input").value;
+  const apiKey = "d6d1858e28fba94ab39aa368c886adb2"; // Replace with your correct MapmyIndia API key
+  const url = `https://apis.mapmyindia.com/advancedmaps/v1/${apiKey}/geocode?addr=${encodeURIComponent(locationName)}`;
+
+  try {
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.copResults && data.copResults.length > 0) {
+          const location = data.copResults[0]; // Get the first result
+          const lat = location.latitude;
+          const lng = location.longitude;
+
+          // Set the map view to the found location
+          map.setView([lat, lng], 12); // Zoom level can be adjusted
+          L.marker([lat, lng]).addTo(map).bindPopup(location.formattedAddress).openPopup(); // Add a marker
+      } else {
+          alert("Location not found. Please try again.");
+      }
+  } catch (error) {
+      console.error("Error fetching location:", error);
+  }
+}
+
+// Event listener for the search button
+document.getElementById("search-button").addEventListener("click", searchLocation);
+
+</script>
+    </script>
+  </body>
+</html>
